@@ -17,9 +17,11 @@ import org.elasticsearch.common.CheckedSupplier;
 import org.elasticsearch.common.util.BigArrays;
 import org.elasticsearch.common.util.BitArray;
 import org.elasticsearch.compute.Describable;
+import org.elasticsearch.compute.aggregation.AggregatorMode;
 import org.elasticsearch.compute.aggregation.GroupingAggregator;
 import org.elasticsearch.compute.aggregation.GroupingAggregator.Factory;
 import org.elasticsearch.compute.aggregation.GroupingAggregatorFunction;
+import org.elasticsearch.compute.aggregation.GroupingKey;
 import org.elasticsearch.compute.aggregation.SeenGroupIds;
 import org.elasticsearch.compute.aggregation.blockhash.BlockHash;
 import org.elasticsearch.compute.aggregation.blockhash.BlockHash.GroupSpec;
@@ -504,12 +506,11 @@ public class OrdinalsGroupingOperator implements Operator {
             );
             this.aggregator = new HashAggregationOperator(
                 aggregatorFactories,
-                () -> BlockHash.build(
-                    List.of(new GroupSpec(channelIndex, groupingElementType)),
-                    driverContext.blockFactory(),
-                    maxPageSize,
-                    false
+                List.of(
+                    // NOCOMMIT double check the mode
+                    GroupingKey.forStatelessGrouping(channelIndex, groupingElementType).get(AggregatorMode.INITIAL)
                 ),
+                () -> BlockHash.build(List.of(new GroupSpec(0, groupingElementType)), driverContext.blockFactory(), maxPageSize, false),
                 driverContext
             );
         }

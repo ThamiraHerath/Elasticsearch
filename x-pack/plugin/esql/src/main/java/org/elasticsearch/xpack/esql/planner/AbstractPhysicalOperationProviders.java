@@ -11,7 +11,7 @@ import org.elasticsearch.compute.aggregation.Aggregator;
 import org.elasticsearch.compute.aggregation.AggregatorFunctionSupplier;
 import org.elasticsearch.compute.aggregation.AggregatorMode;
 import org.elasticsearch.compute.aggregation.GroupingAggregator;
-import org.elasticsearch.compute.aggregation.blockhash.BlockHash;
+import org.elasticsearch.compute.aggregation.GroupingKey;
 import org.elasticsearch.compute.data.ElementType;
 import org.elasticsearch.compute.operator.AggregationOperator;
 import org.elasticsearch.compute.operator.HashAggregationOperator.HashAggregationOperatorFactory;
@@ -159,8 +159,12 @@ public abstract class AbstractPhysicalOperationProviders implements PhysicalOper
                     context
                 );
             } else {
+                List<GroupingKey.Factory> groupings = new ArrayList<>(groupSpecs.size());
+                for (GroupSpec group : groupSpecs) {
+                    groupings.add(group.toGroupingKey().get(aggregatorMode));
+                }
                 operatorFactory = new HashAggregationOperatorFactory(
-                    groupSpecs.stream().map(GroupSpec::toHashGroupSpec).toList(),
+                    groupings,
                     aggregatorFactories,
                     context.pageSize(aggregateExec.estimatedRowSize())
                 );
@@ -285,11 +289,11 @@ public abstract class AbstractPhysicalOperationProviders implements PhysicalOper
     }
 
     private record GroupSpec(Integer channel, Attribute attribute) {
-        BlockHash.GroupSpec toHashGroupSpec() {
+        GroupingKey.Supplier toGroupingKey() {
             if (channel == null) {
                 throw new EsqlIllegalArgumentException("planned to use ordinals but tried to use the hash instead");
             }
-            return new BlockHash.GroupSpec(channel, elementType());
+            return GroupingKey.forStatelessGrouping(channel, elementType());
         }
 
         ElementType elementType() {

@@ -28,6 +28,7 @@ import org.elasticsearch.core.TimeValue;
 import org.elasticsearch.features.NodeFeature;
 import org.elasticsearch.index.mapper.IgnoredSourceFieldMapper;
 import org.elasticsearch.index.mapper.Mapper;
+import org.elasticsearch.index.mapper.SourceFieldMapper;
 import org.elasticsearch.index.translog.Translog;
 import org.elasticsearch.ingest.IngestService;
 import org.elasticsearch.node.Node;
@@ -847,6 +848,12 @@ public final class IndexSettings {
 
     private final Mapper.SourceKeepMode sourceKeepMode;
 
+    private final SourceFieldMapper.Mode sourceMode;
+
+    public boolean isSyntheticSourceMode() {
+        return sourceMode == SourceFieldMapper.Mode.SYNTHETIC;
+    }
+
     /**
      * Returns the default search fields for this index.
      */
@@ -977,6 +984,7 @@ public final class IndexSettings {
         mappingDimensionFieldsLimit = scopedSettings.get(INDEX_MAPPING_DIMENSION_FIELDS_LIMIT_SETTING);
         indexRouting = IndexRouting.fromIndexMetadata(indexMetadata);
         sourceKeepMode = scopedSettings.get(Mapper.SYNTHETIC_SOURCE_KEEP_INDEX_SETTING);
+        sourceMode = scopedSettings.get(SourceFieldMapper.SOURCE_MODE_SETTING);
         es87TSDBCodecEnabled = scopedSettings.get(TIME_SERIES_ES87TSDB_CODEC_ENABLED_SETTING);
         skipIgnoredSourceWrite = scopedSettings.get(IgnoredSourceFieldMapper.SKIP_IGNORED_SOURCE_WRITE_SETTING);
         skipIgnoredSourceRead = scopedSettings.get(IgnoredSourceFieldMapper.SKIP_IGNORED_SOURCE_READ_SETTING);

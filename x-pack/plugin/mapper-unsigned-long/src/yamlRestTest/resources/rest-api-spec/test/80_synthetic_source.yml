@@ -7,9 +7,9 @@ synthetic source:
       indices.create:
         index: synthetic_source_test
         body:
+          settings:
+            index.mapper.source.mode: synthetic
           mappings:
-            _source:
-              mode: synthetic
             properties:
               name:
                 type: keyword
@@ -52,9 +52,9 @@ synthetic source with copy_to:
       indices.create:
         index: synthetic_source_test
         body:
+          settings:
+            index.mapper.source.mode: synthetic
           mappings:
-            _source:
-              mode: synthetic
             properties:
               name:
                 type: keyword
@@ -111,9 +111,9 @@ synthetic source with disabled doc_values:
       indices.create:
         index: synthetic_source_test
         body:
+          settings:
+            index.mapper.source.mode: synthetic
           mappings:
-            _source:
-              mode: synthetic
             properties:
               name:
                 type: keyword

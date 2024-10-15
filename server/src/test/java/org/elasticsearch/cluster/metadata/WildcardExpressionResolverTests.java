@@ -21,12 +21,16 @@ import org.elasticsearch.test.ESTestCase;
 
 import java.util.Arrays;
 import java.util.Collection;
+import java.util.EnumSet;
 import java.util.List;
 import java.util.Set;
 import java.util.function.Predicate;
 import java.util.stream.Collectors;
 
+import static org.elasticsearch.action.support.IndexComponentSelector.DATA;
+import static org.elasticsearch.action.support.IndexComponentSelector.FAILURES;
 import static org.elasticsearch.cluster.metadata.DataStreamTestHelper.createBackingIndex;
+import static org.elasticsearch.cluster.metadata.DataStreamTestHelper.createFailureStore;
 import static org.elasticsearch.common.util.set.Sets.newHashSet;
 import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.equalTo;
@@ -144,6 +148,18 @@ public class WildcardExpressionResolverTests extends ESTestCase {
             newHashSet(IndexNameExpressionResolver.WildcardExpressionResolver.resolve(context, resolvedExpressions("testYYY", "testX*"))),
             equalTo(resolvedExpressionsSet("testXXX", "testXYY", "testYYY"))
         );
+
+        // The alias contains only indices and those do not have a failure component to them,
+        // so they are not returned from the wildcard resolver.
+        assertThat(
+            newHashSet(
+                IndexNameExpressionResolver.WildcardExpressionResolver.resolve(
+                    context,
+                    List.of(new ResolvedExpression("a*1", DATA), new ResolvedExpression("a*2", FAILURES))
+                )
+            ),
+            equalTo(newHashSet(new ResolvedExpression("testXXX", DATA)))
+        );
     }
 
     public void testConvertWildcardsOpenClosedIndicesTests() {
@@ -258,13 +274,26 @@ public class WildcardExpressionResolverTests extends ESTestCase {
             SystemIndexAccessLevel.NONE
         );
         assertThat(
-            newHashSet(IndexNameExpressionResolver.WildcardExpressionResolver.resolveAll(context)),
+            newHashSet(IndexNameExpressionResolver.WildcardExpressionResolver.resolveAll(context, EnumSet.of(DATA))),
+            equalTo(resolvedExpressionsSet("testXXX", "testXYY", "testYYY"))
+        );
+        assertThat(
+            newHashSet(IndexNameExpressionResolver.WildcardExpressionResolver.resolveAll(context, EnumSet.of(FAILURES))),
+            equalTo(newHashSet())
+        );
+        assertThat(
+            newHashSet(IndexNameExpressionResolver.WildcardExpressionResolver.resolveAll(context, EnumSet.of(DATA, FAILURES))),
             equalTo(resolvedExpressionsSet("testXXX", "testXYY", "testYYY"))
         );
         assertThat(
             newHashSet(IndexNameExpressionResolver.resolveExpressions(context, "_all")),
             equalTo(resolvedExpressionsSet("testXXX", "testXYY", "testYYY"))
         );
+        assertThat(
+            newHashSet(IndexNameExpressionResolver.resolveExpressions(context, "_all$data")),
+            equalTo(resolvedExpressionsSet("testXXX", "testXYY", "testYYY"))
+        );
+        assertThat(newHashSet(IndexNameExpressionResolver.resolveExpressions(context, "_all$failures")), equalTo(Set.of()));
         IndicesOptions noExpandOptions = IndicesOptions.fromOptions(
             randomBoolean(),
             true,
@@ -281,6 +310,8 @@ public class WildcardExpressionResolverTests extends ESTestCase {
             SystemIndexAccessLevel.NONE
         );
         assertThat(IndexNameExpressionResolver.resolveExpressions(noExpandContext, "_all").size(), equalTo(0));
+        assertThat(IndexNameExpressionResolver.resolveExpressions(noExpandContext, "_all$data").size(), equalTo(0));
+        assertThat(IndexNameExpressionResolver.resolveExpressions(noExpandContext, "_all$failures").size(), equalTo(0));
     }
 
     public void testAllAliases() {
@@ -300,7 +331,10 @@ public class WildcardExpressionResolverTests extends ESTestCase {
                 IndicesOptions.lenientExpandOpen(), // don't include hidden
                 SystemIndexAccessLevel.NONE
             );
-            assertThat(newHashSet(IndexNameExpressionResolver.WildcardExpressionResolver.resolveAll(context)), equalTo(Set.of()));
+            assertThat(
+                newHashSet(IndexNameExpressionResolver.WildcardExpressionResolver.resolveAll(context, EnumSet.of(DATA))),
+                equalTo(Set.of())
+            );
         }
 
         {
@@ -320,7 +354,7 @@ public class WildcardExpressionResolverTests extends ESTestCase {
                 SystemIndexAccessLevel.NONE
             );
             assertThat(
-                newHashSet(IndexNameExpressionResolver.WildcardExpressionResolver.resolveAll(context)),
+                newHashSet(IndexNameExpressionResolver.WildcardExpressionResolver.resolveAll(context, EnumSet.of(DATA))),
                 equalTo(resolvedExpressionsSet("index-visible-alias"))
             );
         }
@@ -331,6 +365,7 @@ public class WildcardExpressionResolverTests extends ESTestCase {
         String dataStreamName = "foo_logs";
         long epochMillis = randomLongBetween(1580536800000L, 1583042400000L);
         IndexMetadata firstBackingIndexMetadata = createBackingIndex(dataStreamName, 1, epochMillis).build();
+        IndexMetadata firstFailureIndexMetadata = createFailureStore(dataStreamName, 1, epochMillis).build();
 
         IndicesOptions indicesAndAliasesOptions = IndicesOptions.fromOptions(
             randomBoolean(),
@@ -347,7 +382,14 @@ public class WildcardExpressionResolverTests extends ESTestCase {
             // visible data streams should be returned by _all even show backing indices are hidden
             Metadata.Builder mdBuilder = Metadata.builder()
                 .put(firstBackingIndexMetadata, true)
-                .put(DataStreamTestHelper.newInstance(dataStreamName, List.of(firstBackingIndexMetadata.getIndex())));
+                .put(firstFailureIndexMetadata, true)
+                .put(
+                    DataStreamTestHelper.newInstance(
+                        dataStreamName,
+                        List.of(firstBackingIndexMetadata.getIndex()),
+                        List.of(firstFailureIndexMetadata.getIndex())
+                    )
+                );
 
             ClusterState state = ClusterState.builder(new ClusterName("_name")).metadata(mdBuilder).build();
 
@@ -363,16 +405,33 @@ public class WildcardExpressionResolverTests extends ESTestCase {
             );
 
             assertThat(
-                newHashSet(IndexNameExpressionResolver.WildcardExpressionResolver.resolveAll(context)),
+                newHashSet(IndexNameExpressionResolver.WildcardExpressionResolver.resolveAll(context, EnumSet.of(DATA))),
                 equalTo(resolvedExpressionsSet(DataStream.getDefaultBackingIndexName("foo_logs", 1, epochMillis)))
+            );
+            assertThat(
+                newHashSet(IndexNameExpressionResolver.WildcardExpressionResolver.resolveAll(context, EnumSet.of(DATA, FAILURES))),
+                equalTo(
+                    resolvedExpressionsSet(
+                        DataStream.getDefaultBackingIndexName("foo_logs", 1, epochMillis),
+                        DataStream.getDefaultFailureStoreName("foo_logs", 1, epochMillis)
+                    )
+                )
             );
         }
 
         {
             // if data stream itself is hidden, backing indices should not be returned
-            var dataStream = DataStream.builder(dataStreamName, List.of(firstBackingIndexMetadata.getIndex())).setHidden(true).build();
+            var dataStream = DataStream.builder(dataStreamName, List.of(firstBackingIndexMetadata.getIndex()))
+                .setFailureIndices(
+                    DataStream.DataStreamIndices.failureIndicesBuilder(List.of(firstFailureIndexMetadata.getIndex())).build()
+                )
+                .setHidden(true)
+                .build();
 
-            Metadata.Builder mdBuilder = Metadata.builder().put(firstBackingIndexMetadata, true).put(dataStream);
+            Metadata.Builder mdBuilder = Metadata.builder()
+                .put(firstBackingIndexMetadata, true)
+                .put(firstFailureIndexMetadata, true)
+                .put(dataStream);
 
             ClusterState state = ClusterState.builder(new ClusterName("_name")).metadata(mdBuilder).build();
 
@@ -387,7 +446,14 @@ public class WildcardExpressionResolverTests extends ESTestCase {
                 NONE
             );
 
-            assertThat(newHashSet(IndexNameExpressionResolver.WildcardExpressionResolver.resolveAll(context)), equalTo(Set.of()));
+            assertThat(
+                newHashSet(IndexNameExpressionResolver.WildcardExpressionResolver.resolveAll(context, EnumSet.of(DATA))),
+                equalTo(Set.of())
+            );
+            assertThat(
+                newHashSet(IndexNameExpressionResolver.WildcardExpressionResolver.resolveAll(context, EnumSet.of(DATA, FAILURES))),
+                equalTo(Set.of())
+            );
         }
     }
 
@@ -621,6 +687,8 @@ public class WildcardExpressionResolverTests extends ESTestCase {
         long epochMillis = randomLongBetween(1580536800000L, 1583042400000L);
         IndexMetadata firstBackingIndexMetadata = createBackingIndex(dataStreamName, 1, epochMillis).build();
         IndexMetadata secondBackingIndexMetadata = createBackingIndex(dataStreamName, 2, epochMillis).build();
+        IndexMetadata firstFailureIndexMetadata = createFailureStore(dataStreamName, 1, epochMillis).build();
+        IndexMetadata secondFailureIndexMetadata = createFailureStore(dataStreamName, 2, epochMillis).build();
 
         Metadata.Builder mdBuilder = Metadata.builder()
             .put(indexBuilder("foo_foo").state(State.OPEN))
@@ -628,11 +696,14 @@ public class WildcardExpressionResolverTests extends ESTestCase {
             .put(indexBuilder("foo_index").state(State.OPEN).putAlias(AliasMetadata.builder("foo_alias")))
             .put(indexBuilder("bar_index").state(State.OPEN).putAlias(AliasMetadata.builder("foo_alias")))
             .put(firstBackingIndexMetadata, true)
+            .put(firstFailureIndexMetadata, true)
             .put(secondBackingIndexMetadata, true)
+            .put(secondFailureIndexMetadata, true)
             .put(
                 DataStreamTestHelper.newInstance(
                     dataStreamName,
-                    List.of(firstBackingIndexMetadata.getIndex(), secondBackingIndexMetadata.getIndex())
+                    List.of(firstBackingIndexMetadata.getIndex(), secondBackingIndexMetadata.getIndex()),
+                    List.of(firstFailureIndexMetadata.getIndex(), secondFailureIndexMetadata.getIndex())
                 )
             );
 
@@ -710,6 +781,21 @@ public class WildcardExpressionResolverTests extends ESTestCase {
                 )
             );
 
+            // data stream's corresponding backing and failure indices are resolved
+            indices = IndexNameExpressionResolver.WildcardExpressionResolver.resolve(
+                indicesAliasesAndDataStreamsContext,
+                List.of(new ResolvedExpression("foo_*", FAILURES))
+            );
+            assertThat(
+                newHashSet(indices),
+                equalTo(
+                    resolvedExpressionsSet(
+                        DataStream.getDefaultFailureStoreName("foo_logs", 1, epochMillis),
+                        DataStream.getDefaultFailureStoreName("foo_logs", 2, epochMillis)
+                    )
+                )
+            );
+
             // include all wildcard adds the data stream's backing indices
             indices = IndexNameExpressionResolver.WildcardExpressionResolver.resolve(
                 indicesAliasesAndDataStreamsContext,
@@ -771,6 +857,41 @@ public class WildcardExpressionResolverTests extends ESTestCase {
                 )
             );
 
+            // only data stream's corresponding failure indices are resolved
+            indices = IndexNameExpressionResolver.WildcardExpressionResolver.resolve(
+                indicesAliasesDataStreamsAndHiddenIndices,
+                List.of(new ResolvedExpression("foo_*", FAILURES))
+            );
+            assertThat(
+                newHashSet(indices),
+                equalTo(
+                    resolvedExpressionsSet(
+                        DataStream.getDefaultFailureStoreName("foo_logs", 1, epochMillis),
+                        DataStream.getDefaultFailureStoreName("foo_logs", 2, epochMillis)
+                    )
+                )
+            );
+
+            // Resolve both backing and failure indices
+            indices = IndexNameExpressionResolver.WildcardExpressionResolver.resolve(
+                indicesAliasesDataStreamsAndHiddenIndices,
+                List.of(new ResolvedExpression("foo_*", DATA), new ResolvedExpression("foo_*", FAILURES))
+            );
+            assertThat(
+                newHashSet(indices),
+                equalTo(
+                    resolvedExpressionsSet(
+                        "foo_index",
+                        "bar_index",
+                        "foo_foo",
+                        DataStream.getDefaultBackingIndexName("foo_logs", 1, epochMillis),
+                        DataStream.getDefaultBackingIndexName("foo_logs", 2, epochMillis),
+                        DataStream.getDefaultFailureStoreName("foo_logs", 1, epochMillis),
+                        DataStream.getDefaultFailureStoreName("foo_logs", 2, epochMillis)
+                    )
+                )
+            );
+
             // include all wildcard adds the data stream's backing indices
             indices = IndexNameExpressionResolver.WildcardExpressionResolver.resolve(
                 indicesAliasesDataStreamsAndHiddenIndices,
@@ -785,7 +906,45 @@ public class WildcardExpressionResolverTests extends ESTestCase {
                         "foo_foo",
                         "bar_bar",
                         DataStream.getDefaultBackingIndexName("foo_logs", 1, epochMillis),
-                        DataStream.getDefaultBackingIndexName("foo_logs", 2, epochMillis)
+                        DataStream.getDefaultBackingIndexName("foo_logs", 2, epochMillis),
+                        DataStream.getDefaultFailureStoreName("foo_logs", 1, epochMillis),
+                        DataStream.getDefaultFailureStoreName("foo_logs", 2, epochMillis)
+                    )
+                )
+            );
+
+            // include all wildcard adds the data stream's failure indices
+            indices = IndexNameExpressionResolver.WildcardExpressionResolver.resolve(
+                indicesAliasesDataStreamsAndHiddenIndices,
+                List.of(new ResolvedExpression("*", FAILURES))
+            );
+            assertThat(
+                newHashSet(indices),
+                equalTo(
+                    resolvedExpressionsSet(
+                        DataStream.getDefaultFailureStoreName("foo_logs", 1, epochMillis),
+                        DataStream.getDefaultFailureStoreName("foo_logs", 2, epochMillis)
+                    )
+                )
+            );
+
+            // include all wildcard adds the data stream's backing and failure indices
+            indices = IndexNameExpressionResolver.WildcardExpressionResolver.resolve(
+                indicesAliasesDataStreamsAndHiddenIndices,
+                List.of(new ResolvedExpression("*", DATA), new ResolvedExpression("*", FAILURES))
+            );
+            assertThat(
+                newHashSet(indices),
+                equalTo(
+                    resolvedExpressionsSet(
+                        "foo_index",
+                        "bar_index",
+                        "foo_foo",
+                        "bar_bar",
+                        DataStream.getDefaultBackingIndexName("foo_logs", 1, epochMillis),
+                        DataStream.getDefaultBackingIndexName("foo_logs", 2, epochMillis),
+                        DataStream.getDefaultFailureStoreName("foo_logs", 1, epochMillis),
+                        DataStream.getDefaultFailureStoreName("foo_logs", 2, epochMillis)
                     )
                 )
             );

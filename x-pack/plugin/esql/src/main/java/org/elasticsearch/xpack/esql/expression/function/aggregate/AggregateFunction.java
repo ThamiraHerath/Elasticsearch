@@ -117,6 +117,10 @@ public abstract class AggregateFunction extends Function {
         return filter;
     }
 
+    public boolean isConstantFoldable() {
+        return true;
+    }
+
     @Override
     protected TypeResolution resolveType() {
         return TypeResolutions.isExact(field, sourceText(), DEFAULT);

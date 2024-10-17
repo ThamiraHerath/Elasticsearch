@@ -385,7 +385,12 @@ public class EsqlCapabilities {
         /**
          * Allow filter per individual aggregation.
          */
-        PER_AGG_FILTERING;
+        PER_AGG_FILTERING,
+
+        /**
+         * Support aggregations on constants in more scenarios.
+         */
+        EXTEND_AGGS_ON_CONSTANTS_SUPPORT;
 
         private final boolean snapshotOnly;
         private final FeatureFlag featureFlag;

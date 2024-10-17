@@ -562,8 +562,10 @@ public class RestResponseTests extends ESTestCase {
 
     private void assertChannelWarnings(RestChannel channel) {
         if (channel.detailedErrorsEnabled() == false) {
-            assertCriticalWarnings("The JSON format of non-detailed errors will change in Elasticsearch 9.0" +
-                " to match the JSON structure used for detailed errors");
+            assertCriticalWarnings(
+                "The JSON format of non-detailed errors will change in Elasticsearch 9.0"
+                    + " to match the JSON structure used for detailed errors"
+            );
         }
     }
 

@@ -70,7 +70,7 @@ public abstract class AbstractRestChannel implements RestChannel {
                 DeprecationCategory.API,
                 "http_detailed_errors",
                 "The JSON format of non-detailed errors will change in Elasticsearch 9.0 to match the JSON structure"
-                    + " used for detailed errors"
+                    + " used for detailed errors. To keep using the existing format, use the V8 REST API."
             );
         }
     }

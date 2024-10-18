@@ -66,7 +66,7 @@ public abstract class AbstractRestChannel implements RestChannel {
         this.human = request.paramAsBoolean("human", false);
 
         if (detailedErrorsEnabled == false) {
-            deprecationLogger.critical(
+            deprecationLogger.warn(
                 DeprecationCategory.API,
                 "http_detailed_errors",
                 "The JSON format of non-detailed errors will change in Elasticsearch 9.0 to match the JSON structure"

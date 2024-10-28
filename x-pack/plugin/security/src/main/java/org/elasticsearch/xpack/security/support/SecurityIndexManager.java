@@ -270,7 +270,8 @@ public class SecurityIndexManager implements ClusterStateListener {
             indexMetadata.getSettings()
         );
 
-        if (indexCreatedOnMigrationVersion != null) {
+        // 1 is the first migration, before the MAIN_INDEX_CREATED_ON_MIGRATION_VERSION was introduced
+        if (indexCreatedOnMigrationVersion > 1) {
             return indexCreatedOnMigrationVersion.equals(SecurityMigrations.MIGRATIONS_BY_VERSION.lastKey());
         }
         return SETTING_INDEX_VERSION_CREATED.get(indexMetadata.getSettings()).onOrAfter(IndexVersion.current());

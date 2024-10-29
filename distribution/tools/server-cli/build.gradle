@@ -17,6 +17,14 @@ dependencies {
   testImplementation project(":test:framework")
 }
 
+tasks.named('jar').configure {
+  manifest {
+    attributes(
+      'X-Compile-Elasticsearch-Entitlement-Jar-Suffix': "-${project.version}"
+    )
+  }
+}
+
 tasks.named("test").configure {
   systemProperty "tests.security.manager", "false"
 }

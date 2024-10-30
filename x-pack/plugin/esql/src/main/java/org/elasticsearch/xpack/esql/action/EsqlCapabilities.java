@@ -446,7 +446,12 @@ public class EsqlCapabilities {
         /**
          * Fix pushdown of LIMIT past MV_EXPAND
          */
-        ADD_LIMIT_INSIDE_MV_EXPAND;
+        ADD_LIMIT_INSIDE_MV_EXPAND,
+
+        /**
+         * Support implicit casting from string literal to DATE_PERIOD or TIME_DURATION.
+         */
+        IMPLICIT_CASTING_STRING_LITERAL_TO_TEMPORAL_AMOUNT;
 
         private final boolean enabled;
 

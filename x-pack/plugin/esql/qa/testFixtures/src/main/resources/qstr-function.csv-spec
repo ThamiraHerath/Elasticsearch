@@ -100,6 +100,99 @@ book_no:keyword | title:text
 7140            | The Lord of the Rings Poster Collection: Six Paintings by Alan Lee (No. 1)
 ;
 
+qstrWithFieldAndScoringSorted
+required_capability: qstr_function
+required_capability: metadata_score
+
+// tag::qstr-with-field-scoring-sorted[]
+from books metadata _score
+| where qstr("title:rings")
+| sort _score desc, book_no desc
+| keep book_no, title, _score
+| limit 3;
+// end::qstr-with-field-scoring-sorted[]
+
+// tag::qstr-with-field-scoring-sorted-result[]
+book_no:keyword | title:text                                                                 | _score:double 
+2675            | The Lord of the Rings - Boxed Set                                          | 2.7583377361297607
+7140            | The Lord of the Rings Poster Collection: Six Paintings by Alan Lee (No. 1) | 1.9239964485168457
+2714            | Return of the King Being the Third Part of The Lord of the Rings           | 1.9239964485168457
+;
+// end::qstr-with-field-scoring-sorted-result[]
+
+singleQstrScoring
+required_capability: metadata_score
+required_capability: qstr_function
+from books METADATA _score | where qstr("author:William Faulkner") | keep book_no, author, _score 
+| sort book_no | LIMIT 4;
+
+book_no:keyword | author:text        | _score:double
+2713            | William Faulkner   | 5.9556169509887695
+5119            | William Faulkner   | 6.877357482910156
+5404            | William Faulkner   | 6.0922040939331055
+9896            | William Faulkner   | 6.857903003692627
+;
+
+singleQstrScoringManipulated
+required_capability: metadata_score
+required_capability: qstr_function
+from books METADATA _score | where qstr("author:William Faulkner") | eval add_score = ceil(_score) + 1 
+| keep book_no, author, add_score | sort book_no | LIMIT 4;
+
+book_no:keyword | author:text | add_score:double
+2713            | William Faulkner                                   | 7.0
+5119            | William Faulkner                                   | 8.0
+5404            | William Faulkner                                   | 8.0
+9896            | William Faulkner                                   | 8.0
+;
+
+singleQstrBoostScoringSorted
+required_capability: metadata_score
+required_capability: qstr_function
+from books METADATA _score | where qstr("author:Lord Rings^2") | keep book_no, title, _score | sort _score desc | LIMIT 3;
+
+book_no:keyword | title:text | _score:double
+8875            | The Two Towers | 5.901181697845459
+4023            | A Tolkien Compass: Including J. R. R. Tolkien's Guide to the Names in The Lord of the Rings | 5.665572166442871
+2675            | The Lord of the Rings - Boxed Set | 5.5166754722595215
+;
+
+singleQstrScoringEval
+required_capability: metadata_score
+required_capability: qstr_function
+from books METADATA _score | where qstr("author:Lord Rings") | eval c_score = ceil(_score) | keep book_no, c_score 
+| sort book_no desc | LIMIT 3;
+
+book_no:keyword | c_score:double
+8875            | 3.0
+4023            | 3.0
+2675            | 3.0
+;
+
+singleQstrScoringGrok
+required_capability: metadata_score
+required_capability: qstr_function
+from books METADATA _score | where qstr("author:Lord Rings") 
+| GROK title "%{WORD:title} %{WORD}" 
+| sort _score desc | keep book_no, title, _score | LIMIT 3;
+
+book_no:keyword | title:keyword | _score:double
+8875            | The | 2.9505908489227295
+4023            | A   | 2.8327860832214355
+2675            | The | 2.7583377361297607
+;
+
+singleQstrScoringRename
+required_capability: metadata_score
+required_capability: qstr_function
+from books METADATA _score | where qstr("author:Lord Rings") 
+| rename _score as rank | sort rank desc | keep book_no, rank | LIMIT 3;
+
+book_no:keyword | rank:double
+8875            | 2.9505908489227295
+4023            | 2.8327860832214355
+2675            | 2.7583377361297607
+;
 
 matchMultivaluedTextField
 required_capability: match_function

@@ -187,6 +187,9 @@ public class TransportVersions {
     public static final TransportVersion QUERY_RULES_RETRIEVER = def(8_782_00_0);
     public static final TransportVersion ESQL_CCS_EXEC_INFO_WITH_FAILURES = def(8_783_00_0);
 
+    // FIXME: before merging this PR, make sure to update the transport version correctly
+    public static final TransportVersion ROLE_MONITOR_STATS = def(8_882_00_0);
+
     /*
      * STOP! READ THIS FIRST! No, really,
      *        ____ _____ ___  ____  _        ____  _____    _    ____    _____ _   _ ___ ____    _____ ___ ____  ____ _____ _

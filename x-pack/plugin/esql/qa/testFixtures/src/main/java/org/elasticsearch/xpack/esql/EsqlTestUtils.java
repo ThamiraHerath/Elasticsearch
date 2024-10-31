@@ -210,10 +210,7 @@ public final class EsqlTestUtils {
         return new EsRelation(EMPTY, new EsIndex(randomAlphaOfLength(8), emptyMap()), IndexMode.STANDARD, randomBoolean());
     }
 
-    public static class TestSearchStats extends SearchStats {
-        public TestSearchStats() {
-            super(emptyList());
-        }
+    public static class TestSearchStats implements SearchStats {
 
         @Override
         public long count() {
@@ -252,6 +249,16 @@ public final class EsqlTestUtils {
 
         @Override
         public boolean isIndexed(String field) {
+            return exists(field);
+        }
+
+        @Override
+        public boolean hasDocValues(String field) {
+            return exists(field);
+        }
+
+        @Override
+        public boolean hasIdenticalDelegate(String field) {
             return exists(field);
         }
     }

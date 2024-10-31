@@ -15,22 +15,25 @@ import org.elasticsearch.xpack.esql.stats.SearchStats;
 import java.util.function.Predicate;
 
 class LucenePushDownUtils {
-    /**
-     * this method is supposed to be used to define if a field can be used for exact push down (eg. sort or filter).
-     * "aggregatable" is the most accurate information we can have from field_caps as of now.
-     * Pushing down operations on fields that are not aggregatable would result in an error.
-     */
-    public static boolean isAggregatable(FieldAttribute f) {
-        return f.exactAttribute().field().isAggregatable();
-    }
-
     public static boolean hasIdenticalDelegate(FieldAttribute attr, SearchStats stats) {
         return stats.hasIdenticalDelegate(attr.name());
     }
 
-    public static boolean isPushableFieldAttribute(Expression exp, Predicate<FieldAttribute> hasIdenticalDelegate) {
-        if (exp instanceof FieldAttribute fa && fa.getExactInfo().hasExact() && isAggregatable(fa)) {
-            return fa.dataType() != DataType.TEXT || hasIdenticalDelegate.test(fa);
+    /**
+     * We see fields as pushable if either they are aggregatable or they are indexed.
+     * This covers non-indexed cases like <code>AbstractScriptFieldType</code> which hard-coded <code>isAggregatable</code> to true,
+     * as well as normal <code>FieldAttribute</code>'s which can only be pushed down if they are indexed.
+     * The reason we don't just rely entirely on <code>isAggregatable</code> is because this is often false for normal fields, and could
+     * also differ from node to node, and we can physically plan each node separately, allowing Lucene pushdown on the nodes that
+     * support it, and relying on the compute engine for the nodes that do not.
+     */
+    public static boolean isPushableFieldAttribute(
+        Expression exp,
+        Predicate<FieldAttribute> hasIdenticalDelegate,
+        Predicate<FieldAttribute> isIndexed
+    ) {
+        if (exp instanceof FieldAttribute fa && fa.getExactInfo().hasExact() && (fa.field().isAggregatable() || isIndexed.test(fa))) {
+            return (fa.dataType() != DataType.TEXT && fa.dataType() != DataType.SEMANTIC_TEXT) || hasIdenticalDelegate.test(fa);
         }
         return false;
     }

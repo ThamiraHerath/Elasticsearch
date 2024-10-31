@@ -16,6 +16,7 @@ import org.apache.lucene.util.IntroSorter;
 import org.elasticsearch.cluster.ClusterInfo;
 import org.elasticsearch.cluster.metadata.IndexMetadata;
 import org.elasticsearch.cluster.metadata.Metadata;
+import org.elasticsearch.cluster.node.DiscoveryNode;
 import org.elasticsearch.cluster.routing.RoutingNode;
 import org.elasticsearch.cluster.routing.RoutingNodes;
 import org.elasticsearch.cluster.routing.ShardRouting;
@@ -52,6 +53,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.function.BiFunction;
+import java.util.function.Supplier;
 import java.util.stream.StreamSupport;
 
 import static org.elasticsearch.cluster.metadata.SingleNodeShutdownMetadata.Type.REPLACE;
@@ -118,6 +120,7 @@ public class BalancedShardsAllocator implements ShardsAllocator {
     private volatile float threshold;
 
     private final WriteLoadForecaster writeLoadForecaster;
+    private Supplier<Map<DiscoveryNode, DesiredBalanceMetrics.NodeWeightStats>> nodeWeightStatsSupplier = () -> Map.of();
 
     public BalancedShardsAllocator() {
         this(Settings.EMPTY);
@@ -159,6 +162,13 @@ public class BalancedShardsAllocator implements ShardsAllocator {
         balancer.allocateUnassigned();
         balancer.moveShards();
         balancer.balance();
+
+        nodeWeightStatsSupplier = new BalancedShardsAllocatorNodeWeightStats(balancer, weightFunction)::get;
+    }
+
+    @Override
+    public Map<DiscoveryNode, DesiredBalanceMetrics.NodeWeightStats> getNodeWeightStats() {
+        return nodeWeightStatsSupplier.get();
     }
 
     @Override
@@ -275,11 +285,15 @@ public class BalancedShardsAllocator implements ShardsAllocator {
         }
 
         float weight(Balancer balancer, ModelNode node, String index) {
-            final float weightShard = node.numShards() - balancer.avgShardsPerNode();
             final float weightIndex = node.numShards(index) - balancer.avgShardsPerNode(index);
+            return nodeWeight(balancer, node) + theta1 * weightIndex;
+        }
+
+        float nodeWeight(Balancer balancer, ModelNode node) {
+            final float weightShard = node.numShards() - balancer.avgShardsPerNode();
             final float ingestLoad = (float) (node.writeLoad() - balancer.avgWriteLoadPerNode());
             final float diskUsage = (float) (node.diskUsageInBytes() - balancer.avgDiskUsageInBytesPerNode());
-            return theta0 * weightShard + theta1 * weightIndex + theta2 * ingestLoad + theta3 * diskUsage;
+            return theta0 * weightShard + theta2 * ingestLoad + theta3 * diskUsage;
         }
 
         float minWeightDelta(Balancer balancer, String index) {
@@ -1439,6 +1453,25 @@ public class BalancedShardsAllocator implements ShardsAllocator {
 
         public float delta() {
             return weights[weights.length - 1] - weights[0];
+        }
+    }
+
+    record BalancedShardsAllocatorNodeWeightStats(Balancer balancer, WeightFunction weightFunction) {
+        public Map<DiscoveryNode, DesiredBalanceMetrics.NodeWeightStats> get() {
+            Map<DiscoveryNode, DesiredBalanceMetrics.NodeWeightStats> nodeLevelWeights = new HashMap<>();
+            for (var entry : balancer.nodes.entrySet()) {
+                var node = entry.getValue();
+                nodeLevelWeights.put(
+                    node.routingNode.node(),
+                    new DesiredBalanceMetrics.NodeWeightStats(
+                        node.numShards(),
+                        node.diskUsageInBytes(),
+                        node.writeLoad(),
+                        weightFunction.nodeWeight(balancer, node)
+                    )
+                );
+            }
+            return nodeLevelWeights;
         }
     }
 }
